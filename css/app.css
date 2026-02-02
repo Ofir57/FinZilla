@@ -614,6 +614,29 @@ select.form-control {
     cursor: pointer;
     z-index: 101;
     box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+
+/* Mobile Language Toggle */
+.mobile-lang-toggle {
+    display: none;
+    position: fixed;
+    bottom: var(--spacing-lg);
+    right: var(--spacing-lg);
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    font-size: 1.3rem;
+    cursor: pointer;
+    z-index: 101;
+    box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4);
+}
+
+body.ltr .mobile-lang-toggle {
+    right: auto;
+    left: var(--spacing-lg);
+}
 }
 
 /* ===== Sidebar Footer ===== */
@@ -658,6 +681,12 @@ select.form-control {
     }
 
     .mobile-menu-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mobile-lang-toggle {
         display: flex;
         align-items: center;
         justify-content: center;
