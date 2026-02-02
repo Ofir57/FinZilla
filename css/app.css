@@ -90,6 +90,10 @@ body.ltr .sidebar {
     border-right: 1px solid var(--color-border);
 }
 
+body.ltr .sidebar-header {
+    flex-direction: row;
+}
+
 .main-content {
     flex: 1;
     margin-right: 260px;
