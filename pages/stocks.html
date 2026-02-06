@@ -206,13 +206,13 @@
                             <tr>
                                 <th data-i18n="stocks.symbol">סימול</th>
                                 <th data-i18n="stocks.companyName">שם</th>
+                                <th>מטבע</th>
                                 <th data-i18n="stocks.quantity">כמות</th>
                                 <th data-i18n="stocks.avgPrice">מחיר ממוצע</th>
                                 <th data-i18n="stocks.currentPrice">מחיר נוכחי</th>
+                                <th>רווח/הפסד</th>
+                                <th>שווי בש"ח</th>
                                 <th>MA150</th>
-                                <th>מיקום</th>
-                                <th data-i18n="stocks.totalValue">שווי</th>
-                                <th data-i18n="stocks.profitLoss">רווח/הפסד</th>
                                 <th data-i18n="common.actions">פעולות</th>
                             </tr>
                         </thead>
@@ -576,61 +576,90 @@
             refreshAllPrices();
         });
 
-        function loadStocks() {
+        async function loadStocks() {
             const data = Storage.getStocks();
             const holdingsTable = document.getElementById('holdingsTable');
             const transactionsTable = document.getElementById('transactionsTable');
 
-            // Calculate totals
-            let totalValue = 0;
-            let totalCost = 0;
+            // Get exchange rates for conversion to ILS
+            const rates = await CurrencyRates.getRates();
+
+            // Calculate totals in ILS
+            let totalValueILS = 0;
+            let totalCostILS = 0;
 
             if (data.holdings.length === 0) {
                 holdingsTable.innerHTML = `<tr><td colspan="10" style="text-align: center; color: var(--color-text-secondary);">${I18n.t('stocks.noStocks')}</td></tr>`;
             } else {
                 holdingsTable.innerHTML = data.holdings.map(h => {
                     const cached = priceCache[h.symbol] || {};
-                    const currentPrice = cached.currentPrice || h.currentPrice || h.avgPrice;
-                    const ma150 = cached.ma150;
-                    const ma150Position = cached.ma150Position;
-                    const ma150PositionPercent = cached.ma150PositionPercent;
+                    const currency = h.currency || 'USD';
 
+                    // Use cached price in native currency, or fall back to stored price
+                    let currentPrice = h.currentPrice || h.avgPrice;
+                    let ma150 = null;
+                    let ma150Position = null;
+                    let ma150PositionPercent = null;
+
+                    // If we have cached data and it's in the same currency, use it
+                    if (cached.success) {
+                        if (cached.originalCurrency === currency || cached.currency === currency) {
+                            currentPrice = cached.originalPrice || cached.currentPrice;
+                            ma150 = cached.ma150;
+                            ma150Position = cached.ma150Position;
+                            ma150PositionPercent = cached.ma150PositionPercent;
+                        } else if (cached.currentPrice) {
+                            // Yahoo returned different currency, use it but note the difference
+                            currentPrice = cached.currentPrice;
+                            ma150 = cached.ma150;
+                            ma150Position = cached.ma150Position;
+                            ma150PositionPercent = cached.ma150PositionPercent;
+                        }
+                    }
+
+                    // Calculate in native currency
                     const value = h.quantity * currentPrice;
                     const cost = h.quantity * h.avgPrice;
                     const profitLoss = value - cost;
-                    const profitLossPercent = ((profitLoss / cost) * 100).toFixed(2);
-
-                    totalValue += value;
-                    totalCost += cost;
-
+                    const profitLossPercent = cost > 0 ? ((profitLoss / cost) * 100).toFixed(2) : 0;
                     const isProfit = profitLoss >= 0;
 
-                    // MA150 display
-                    let ma150Display = '<span class="ma150-na">-</span>';
-                    let positionDisplay = '<span class="ma150-na">-</span>';
+                    // Convert to ILS for totals
+                    const rateToILS = rates[currency] || 1;
+                    const valueILS = value * rateToILS;
+                    const costILS = cost * rateToILS;
+                    totalValueILS += valueILS;
+                    totalCostILS += costILS;
 
+                    // Currency flag
+                    const currencyFlags = { USD: '🇺🇸', ILS: '🇮🇱', GBP: '🇬🇧', EUR: '🇪🇺' };
+                    const currencyFlag = currencyFlags[currency] || '';
+
+                    // MA150 display
+                    let ma150Display = '-';
                     if (ma150 !== null && ma150 !== undefined) {
-                        ma150Display = formatStockPrice(ma150, h.currency);
-                        const positionIcon = ma150Position === 'above' ? '🟢' : '🔴';
-                        const positionPercent = ma150PositionPercent?.toFixed(1) || '0';
-                        const positionSign = ma150PositionPercent >= 0 ? '+' : '';
-                        positionDisplay = `<span class="${ma150Position === 'above' ? 'profit' : 'loss'}">${positionIcon} ${positionSign}${positionPercent}%</span>`;
+                        ma150Display = `${formatStockPrice(ma150, currency)}`;
+                        if (ma150Position) {
+                            const icon = ma150Position === 'above' ? '🟢' : '🔴';
+                            const pct = ma150PositionPercent?.toFixed(1) || '0';
+                            ma150Display += `<br><small>${icon} ${ma150PositionPercent >= 0 ? '+' : ''}${pct}%</small>`;
+                        }
                     }
 
                     return `
                         <tr>
                             <td class="stock-symbol">${h.symbol}</td>
                             <td>${h.name || '-'}</td>
-                            <td>${h.quantity}</td>
-                            <td>${formatStockPrice(h.avgPrice, h.currency)}</td>
-                            <td>${formatStockPrice(currentPrice, h.currency)}</td>
-                            <td>${ma150Display}</td>
-                            <td>${positionDisplay}</td>
-                            <td>${formatStockPrice(value, h.currency)}</td>
+                            <td>${currencyFlag} ${currency}</td>
+                            <td>${h.quantity.toLocaleString()}</td>
+                            <td>${formatStockPrice(h.avgPrice, currency)}</td>
+                            <td>${formatStockPrice(currentPrice, currency)}</td>
                             <td class="${isProfit ? 'profit' : 'loss'}">
-                                ${isProfit ? '+' : ''}${formatStockPrice(profitLoss, h.currency)}
+                                ${isProfit ? '+' : ''}${formatStockPrice(profitLoss, currency)}
                                 <br><small>(${isProfit ? '+' : ''}${profitLossPercent}%)</small>
                             </td>
+                            <td><strong>₪${valueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
+                            <td>${ma150Display}</td>
                             <td>
                                 <div class="action-buttons">
                                     <button class="btn btn-secondary btn-sm" onclick="openAlertModal('${h.symbol}', ${currentPrice})" title="הוסף התראה">🔔</button>
@@ -643,18 +672,22 @@
                     `;
                 }).join('');
 
-                // Update portfolio chart
-                Charts.createPortfolioChart('portfolioChart', data.holdings);
+                // Update portfolio chart with ILS values
+                const holdingsWithILS = data.holdings.map(h => ({
+                    ...h,
+                    valueILS: h.quantity * (priceCache[h.symbol]?.currentPrice || h.currentPrice || h.avgPrice) * (rates[h.currency] || 1)
+                }));
+                Charts.createPortfolioChart('portfolioChart', holdingsWithILS);
             }
 
-            // Update summary metrics
-            const totalProfitLoss = totalValue - totalCost;
-            const totalReturn = totalCost > 0 ? ((totalProfitLoss / totalCost) * 100).toFixed(2) : 0;
-            const isProfit = totalProfitLoss >= 0;
+            // Update summary metrics in ILS
+            const totalProfitLossILS = totalValueILS - totalCostILS;
+            const totalReturn = totalCostILS > 0 ? ((totalProfitLossILS / totalCostILS) * 100).toFixed(2) : 0;
+            const isProfit = totalProfitLossILS >= 0;
 
-            document.getElementById('totalValue').textContent = I18n.formatCurrency(totalValue);
-            document.getElementById('totalCost').textContent = I18n.formatCurrency(totalCost);
-            document.getElementById('totalProfitLoss').textContent = (isProfit ? '+' : '') + I18n.formatCurrency(totalProfitLoss);
+            document.getElementById('totalValue').textContent = `₪${totalValueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('totalCost').textContent = `₪${totalCostILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('totalProfitLoss').textContent = (isProfit ? '+' : '') + `₪${totalProfitLossILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
             document.getElementById('totalProfitLoss').className = isProfit ? 'value profit' : 'value loss';
             document.getElementById('totalReturn').textContent = (isProfit ? '+' : '') + totalReturn + '%';
             document.getElementById('totalReturn').className = isProfit ? 'value profit' : 'value loss';
@@ -753,7 +786,7 @@
         }
 
         function formatStockPrice(price, currency = 'ILS') {
-            const symbols = { ILS: '₪', USD: '$', EUR: '€' };
+            const symbols = { ILS: '₪', USD: '$', EUR: '€', GBP: '£' };
             return `${symbols[currency] || ''}${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         }
 
@@ -787,33 +820,12 @@
                 // Fetch prices
                 const results = await StockAPI.fetchMultiple(uniqueSymbols);
 
-                // Get exchange rates for currency conversion
-                const rates = await CurrencyRates.getRates();
-
-                // Update cache
+                // Update cache - keep prices in native currency
                 for (const result of Object.values(results)) {
                     if (result.success) {
-                        // Convert non-USD prices to USD for portfolio calculations
-                        const holding = holdings.find(h => h.symbol === result.symbol);
-
-                        if (result.currency && result.currency !== 'USD') {
-                            // Convert to USD using exchange rates
-                            const rateToILS = rates[result.currency] || 1;
-                            const usdToILS = rates.USD || 3.65;
-                            const conversionRate = rateToILS / usdToILS;
-
-                            result.currentPriceUSD = result.currentPrice * conversionRate;
-                            result.ma150USD = result.ma150 ? result.ma150 * conversionRate : null;
-                            result.originalCurrency = result.currency;
-                            result.originalPrice = result.currentPrice;
-
-                            // Use USD values for cache if holding is stored in USD
-                            if (holding && holding.currency === 'USD') {
-                                result.currentPrice = result.currentPriceUSD;
-                                if (result.ma150) result.ma150 = result.ma150USD;
-                                result.currency = 'USD';
-                            }
-                        }
+                        // Store original currency info
+                        result.originalCurrency = result.currency;
+                        result.originalPrice = result.currentPrice;
 
                         priceCache[result.symbol] = result;
                         StockAlerts.updatePriceCache(result.symbol, result);
@@ -824,6 +836,7 @@
                         }
 
                         // Update storage price for holdings
+                        const holding = holdings.find(h => h.symbol === result.symbol);
                         if (holding) {
                             Storage.updateStockPrice(result.symbol, result.currentPrice);
                         }
@@ -1636,18 +1649,9 @@
                 // Extract symbol from name
                 const symbolInfo = extractSymbolFromName(name, securityId);
 
-                // For non-USD currencies, use broker's USD values to calculate USD prices
-                let avgPrice = nativeAvgPrice;
-                let currentPrice = nativeCurrentPrice || nativeAvgPrice;
-                let currency = symbolInfo.currency;
-
-                if (symbolInfo.currency !== 'USD' && valueUSD > 0 && quantity > 0) {
-                    // Calculate USD-equivalent prices from broker's USD values
-                    const costUSD = valueUSD - profitUSD;
-                    avgPrice = costUSD / quantity;
-                    currentPrice = valueUSD / quantity;
-                    currency = 'USD'; // Store in USD for correct portfolio totals
-                }
+                // Keep native currency prices - we'll convert for display
+                const avgPrice = nativeAvgPrice;
+                const currentPrice = nativeCurrentPrice || nativeAvgPrice;
 
                 holdings.push({
                     symbol: symbolInfo.symbol,
@@ -1655,9 +1659,11 @@
                     quantity: quantity,
                     avgPrice: avgPrice,
                     currentPrice: currentPrice,
-                    currency: currency,
+                    currency: symbolInfo.currency,
                     market: symbolInfo.market,
-                    originalCurrency: symbolInfo.currency // Keep track of original currency
+                    // Store broker's USD values for reference
+                    brokerValueUSD: valueUSD,
+                    brokerProfitUSD: profitUSD
                 });
             }
 
