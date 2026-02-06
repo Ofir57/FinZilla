@@ -205,8 +205,9 @@
                                 <option value="symbol">סימול</option>
                                 <option value="name">שם</option>
                                 <option value="value" selected>שווי כולל</option>
-                                <option value="profitLoss">רווח/הפסד ₪</option>
-                                <option value="profitPercent">רווח/הפסד %</option>
+                                <option value="portfolioPercent">% מהתיק</option>
+                                <option value="profitLoss">רווח ₪</option>
+                                <option value="profitPercent">רווח %</option>
                                 <option value="quantity">כמות</option>
                             </select>
                             <button onclick="toggleSortDirection()" id="sortDirBtn" class="btn btn-sm btn-secondary" style="padding: 5px 8px;">⬇️</button>
@@ -223,9 +224,11 @@
                                 <th data-i18n="stocks.quantity" style="cursor: pointer;" onclick="setSortBy('quantity')">כמות</th>
                                 <th style="cursor: pointer;" onclick="setSortBy('avgPrice')">עלות ליח'</th>
                                 <th data-i18n="stocks.totalValue" style="cursor: pointer;" onclick="setSortBy('value')">שווי כולל</th>
+                                <th style="cursor: pointer;" onclick="setSortBy('portfolioPercent')">% מהתיק</th>
                                 <th style="cursor: pointer;" onclick="setSortBy('currentPrice')">מחיר נוכחי</th>
                                 <th>MA150</th>
-                                <th data-i18n="stocks.profitLoss" style="cursor: pointer;" onclick="setSortBy('profitLoss')">רווח/הפסד</th>
+                                <th style="cursor: pointer;" onclick="setSortBy('profitLoss')">רווח ₪</th>
+                                <th style="cursor: pointer;" onclick="setSortBy('profitPercent')">רווח %</th>
                                 <th data-i18n="common.actions">פעולות</th>
                             </tr>
                         </thead>
@@ -616,10 +619,18 @@
             let totalCost = 0;
 
             if (data.holdings.length === 0) {
-                holdingsTable.innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--color-text-secondary);">${I18n.t('stocks.noStocks')}</td></tr>`;
+                holdingsTable.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--color-text-secondary);">${I18n.t('stocks.noStocks')}</td></tr>`;
             } else {
                 // Get sort criteria
                 const sortBy = document.getElementById('sortBy')?.value || 'value';
+
+                // First pass: calculate total value for portfolio percentages
+                let portfolioTotalValue = 0;
+                data.holdings.forEach(h => {
+                    const cached = priceCache[h.symbol] || {};
+                    const currentPrice = cached.currentPrice || h.currentPrice || h.avgPrice;
+                    portfolioTotalValue += h.quantity * currentPrice;
+                });
 
                 // Prepare holdings with calculated values for sorting
                 const holdingsWithCalc = data.holdings.map(h => {
@@ -629,7 +640,8 @@
                     const cost = h.quantity * h.avgPrice;
                     const profitLoss = value - cost;
                     const profitPercent = cost > 0 ? (profitLoss / cost) * 100 : 0;
-                    return { ...h, currentPrice, value, cost, profitLoss, profitPercent, cached };
+                    const portfolioPercent = portfolioTotalValue > 0 ? (value / portfolioTotalValue) * 100 : 0;
+                    return { ...h, currentPrice, value, cost, profitLoss, profitPercent, portfolioPercent, cached };
                 });
 
                 // Sort holdings
@@ -644,6 +656,7 @@
                         case 'value': aVal = a.value; bVal = b.value; break;
                         case 'profitLoss': aVal = a.profitLoss; bVal = b.profitLoss; break;
                         case 'profitPercent': aVal = a.profitPercent; bVal = b.profitPercent; break;
+                        case 'portfolioPercent': aVal = a.portfolioPercent; bVal = b.portfolioPercent; break;
                         default: aVal = a.value; bVal = b.value;
                     }
                     if (typeof aVal === 'string') {
@@ -653,12 +666,11 @@
                 });
 
                 holdingsTable.innerHTML = holdingsWithCalc.map(h => {
-                    const { currentPrice, value, cost, profitLoss, profitPercent, cached } = h;
+                    const { currentPrice, value, cost, profitLoss, profitPercent, portfolioPercent, cached } = h;
                     const ma150 = cached.ma150;
                     const ma150Position = cached.ma150Position;
                     const ma150PositionPercent = cached.ma150PositionPercent;
 
-                    const profitLossPercent = profitPercent.toFixed(2);
                     const isProfit = profitLoss >= 0;
 
                     totalValue += value;
@@ -682,11 +694,14 @@
                             <td>${h.quantity.toLocaleString()}</td>
                             <td>₪${h.avgPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td><strong>₪${value.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
+                            <td>${portfolioPercent.toFixed(1)}%</td>
                             <td>₪${currentPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${ma150Display}</td>
                             <td class="${isProfit ? 'profit' : 'loss'}">
                                 ${isProfit ? '+' : ''}₪${profitLoss.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                                <br><small>(${isProfit ? '+' : ''}${profitLossPercent}%)</small>
+                            </td>
+                            <td class="${isProfit ? 'profit' : 'loss'}">
+                                ${isProfit ? '+' : ''}${profitPercent.toFixed(1)}%
                             </td>
                             <td>
                                 <div class="action-buttons">
