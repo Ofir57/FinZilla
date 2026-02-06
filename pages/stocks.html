@@ -1583,8 +1583,8 @@
                 const totalValue = holdings.reduce((sum, h) => sum + (h.quantity * h.currentPrice), 0);
                 const confirmed = confirm(
                     `נמצאו ${holdings.length} אחזקות\n` +
-                    `שווי כולל: $${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2})}\n\n` +
-                    `רשימת מניות:\n${holdings.map(h => `  ${h.symbol} - ${h.name} (${h.quantity} יח')`).join('\n')}\n\n` +
+                    `שווי כולל: ₪${totalValue.toLocaleString(undefined, {minimumFractionDigits: 0})}\n\n` +
+                    `רשימת מניות:\n${holdings.map(h => `  ${h.symbol} - ${h.name} (₪${(h.quantity * h.currentPrice).toLocaleString(undefined, {maximumFractionDigits: 0})})`).join('\n')}\n\n` +
                     `לייבא את כל האחזקות?`
                 );
 
@@ -1623,8 +1623,9 @@
                 });
 
                 App.notify(`יובאו ${imported} אחזקות בהצלחה!`, 'success');
+                // Clear price cache to use imported values
+                Object.keys(priceCache).forEach(key => delete priceCache[key]);
                 loadStocks();
-                refreshAllPrices();
 
             } catch (error) {
                 console.error('Broker import error:', error);
