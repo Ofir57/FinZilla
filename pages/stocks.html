@@ -1671,12 +1671,22 @@
                 // Extract symbol from name
                 const symbolInfo = extractSymbolFromName(name, securityId);
 
+                // Israeli mutual funds are quoted in agorot (1/100 ILS) - convert to ILS
+                let finalAvgPrice = avgPrice;
+                let finalCurrentPrice = currentPrice || avgPrice;
+
+                if (symbolInfo.market === 'IL' && avgPrice > 100) {
+                    // Likely in agorot, convert to ILS
+                    finalAvgPrice = avgPrice / 100;
+                    finalCurrentPrice = (currentPrice || avgPrice) / 100;
+                }
+
                 holdings.push({
                     symbol: symbolInfo.symbol,
                     name: symbolInfo.displayName,
                     quantity: quantity,
-                    avgPrice: avgPrice,
-                    currentPrice: currentPrice || avgPrice,
+                    avgPrice: finalAvgPrice,
+                    currentPrice: finalCurrentPrice,
                     currency: 'ILS',
                     market: symbolInfo.market
                 });
