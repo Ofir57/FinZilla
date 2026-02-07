@@ -269,6 +269,7 @@
                     <div class="chart-container">
                         <canvas id="categoryChart"></canvas>
                     </div>
+                    <div id="categoryBreakdown" style="padding: 15px; border-top: 1px solid var(--color-border);"></div>
                 </div>
             </div>
         </main>
@@ -468,7 +469,7 @@
                 return;
             }
 
-            tbody.innerHTML = monthExpenses.map(exp => {
+            const rows = monthExpenses.map(exp => {
                 const card = data.cards.find(c => c.id === exp.cardId);
                 return `
                     <tr>
@@ -479,33 +480,52 @@
                         <td class="negative">${I18n.formatCurrency(exp.amount)}</td>
                         <td>
                             <div class="action-buttons">
-                                <button class="btn btn-secondary btn-sm" onclick="editExpense('${exp.id}')">✏️</button>
-                                <button class="btn btn-danger btn-sm" onclick="deleteExpense('${exp.id}')">🗑️</button>
+                                <button class="btn btn-secondary btn-sm" onclick="editExpense('${exp.id}')" title="ערוך">✏️</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteExpense('${exp.id}')" title="מחק">🗑️</button>
                             </div>
                         </td>
                     </tr>
                 `;
-            }).join('');
+            });
+
+            // Add totals row
+            rows.push(`
+                <tr style="font-weight: bold; background: var(--color-bg-hover); border-top: 2px solid var(--color-border);">
+                    <td colspan="4" style="text-align: left;">סה"כ (${monthExpenses.length} עסקאות)</td>
+                    <td class="negative">${I18n.formatCurrency(total)}</td>
+                    <td></td>
+                </tr>
+            `);
+
+            tbody.innerHTML = rows.join('');
 
             // Update category chart
-            updateCategoryChart(monthExpenses);
+            updateCategoryChart(monthExpenses, total);
         }
 
-        function updateCategoryChart(expenses) {
+        function updateCategoryChart(expenses, grandTotal) {
             const categoryTotals = {};
             expenses.forEach(exp => {
                 categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
             });
 
             const ctx = document.getElementById('categoryChart');
+            const breakdownDiv = document.getElementById('categoryBreakdown');
             const categories = Object.keys(categoryTotals);
+            const total = Object.values(categoryTotals).reduce((a, b) => a + b, 0);
 
-            if (categories.length === 0) return;
+            if (categories.length === 0) {
+                breakdownDiv.innerHTML = '<p style="text-align: center; color: var(--color-text-secondary);">אין נתונים</p>';
+                return;
+            }
+
+            // Sort by amount descending
+            categories.sort((a, b) => categoryTotals[b] - categoryTotals[a]);
 
             const chartData = {
                 labels: categories.map(cat => I18n.t('credit.categories.' + cat)),
                 datasets: [{
-                    data: Object.values(categoryTotals),
+                    data: categories.map(cat => categoryTotals[cat]),
                     backgroundColor: categories.map(cat => Charts.colors.categories[cat] || Charts.colors.categories.other),
                     borderWidth: 0
                 }]
@@ -527,7 +547,6 @@
                                 callbacks: {
                                     label: (context) => {
                                         const value = context.raw;
-                                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                         const percentage = ((value / total) * 100).toFixed(1);
                                         return `${context.label}: ${I18n.formatCurrency(value)} (${percentage}%)`;
                                     }
@@ -537,6 +556,35 @@
                     }
                 });
             }
+
+            // Build breakdown list
+            const breakdownRows = categories.map(cat => {
+                const amount = categoryTotals[cat];
+                const percentage = ((amount / total) * 100).toFixed(1);
+                const color = Charts.colors.categories[cat] || Charts.colors.categories.other;
+                return `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--color-border);">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="width: 12px; height: 12px; border-radius: 50%; background: ${color};"></span>
+                            <span>${I18n.t('credit.categories.' + cat)}</span>
+                        </div>
+                        <div style="text-align: left;">
+                            <span style="font-weight: bold;">${percentage}%</span>
+                            <span style="color: var(--color-text-secondary); margin-right: 10px;">${I18n.formatCurrency(amount)}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Add total row
+            breakdownRows.push(`
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 0; font-weight: bold; margin-top: 5px;">
+                    <span>סה"כ</span>
+                    <span class="negative">${I18n.formatCurrency(total)}</span>
+                </div>
+            `);
+
+            breakdownDiv.innerHTML = breakdownRows.join('');
         }
 
         // Card Modal Functions
