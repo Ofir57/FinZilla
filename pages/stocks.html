@@ -72,6 +72,37 @@
         }
         .ma150-metric .value.above { color: var(--color-positive); }
         .ma150-metric .value.below { color: var(--color-negative); }
+
+        /* Sticky table headers */
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .table-container table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .table-container table thead th {
+            background: var(--color-bg-card);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        /* Static columns (first 5) - purchase data */
+        .col-static {
+            background: rgba(139, 92, 246, 0.08) !important;
+        }
+        /* Dynamic columns - current data */
+        .col-dynamic {
+            background: rgba(16, 185, 129, 0.08) !important;
+        }
+        /* Header colors */
+        thead .col-static {
+            background: rgba(139, 92, 246, 0.2) !important;
+        }
+        thead .col-dynamic {
+            background: rgba(16, 185, 129, 0.2) !important;
+        }
     </style>
 </head>
 <body>
@@ -219,18 +250,18 @@
                     <table>
                         <thead>
                             <tr>
-                                <th data-i18n="stocks.symbol" style="cursor: pointer;" onclick="setSortBy('symbol')">סימול</th>
-                                <th data-i18n="stocks.companyName" style="cursor: pointer;" onclick="setSortBy('name')">שם</th>
-                                <th data-i18n="stocks.quantity" style="cursor: pointer;" onclick="setSortBy('quantity')">כמות</th>
-                                <th style="cursor: pointer;" onclick="setSortBy('avgPrice')">מחיר קנייה</th>
-                                <th>סה"כ רכישה</th>
-                                <th style="cursor: pointer;" onclick="setSortBy('currentPrice')">מחיר נוכחי</th>
-                                <th>MA150</th>
-                                <th style="cursor: pointer;" onclick="setSortBy('valueILS')">שווי ₪</th>
-                                <th>רווח (מט"ח)</th>
-                                <th style="cursor: pointer;" onclick="setSortBy('profitILS')">רווח ₪</th>
-                                <th style="cursor: pointer;" onclick="setSortBy('portfolioPercent')">% מהתיק</th>
-                                <th data-i18n="common.actions">פעולות</th>
+                                <th class="col-static" data-i18n="stocks.symbol" style="cursor: pointer;" onclick="setSortBy('symbol')">סימול</th>
+                                <th class="col-static" data-i18n="stocks.companyName" style="cursor: pointer;" onclick="setSortBy('name')">שם</th>
+                                <th class="col-static" data-i18n="stocks.quantity" style="cursor: pointer;" onclick="setSortBy('quantity')">כמות</th>
+                                <th class="col-static" style="cursor: pointer;" onclick="setSortBy('avgPrice')">מחיר קנייה</th>
+                                <th class="col-static">עלות רכישה ₪</th>
+                                <th class="col-dynamic" style="cursor: pointer;" onclick="setSortBy('currentPrice')">מחיר נוכחי</th>
+                                <th class="col-dynamic">MA150</th>
+                                <th class="col-dynamic" style="cursor: pointer;" onclick="setSortBy('valueILS')">שווי ₪</th>
+                                <th class="col-dynamic">רווח (מט"ח)</th>
+                                <th class="col-dynamic" style="cursor: pointer;" onclick="setSortBy('profitILS')">רווח ₪</th>
+                                <th class="col-dynamic" style="cursor: pointer;" onclick="setSortBy('portfolioPercent')">% מהתיק</th>
+                                <th class="col-dynamic" data-i18n="common.actions">פעולות</th>
                             </tr>
                         </thead>
                         <tbody id="holdingsTable">
@@ -715,9 +746,6 @@
                         totalProfitCurrency[currency] = (totalProfitCurrency[currency] || 0) + profitInCurrency;
                     }
 
-                    // Total purchase cost in trading currency
-                    const totalPurchase = h.avgPrice * h.quantity;
-
                     // MA150 from cache (in trading currency)
                     const ma150 = cached.ma150;
                     let ma150Display = '<span style="color: var(--color-text-secondary);">-</span>';
@@ -735,25 +763,25 @@
 
                     return `
                         <tr>
-                            <td class="stock-symbol">${h.symbol}</td>
-                            <td>${h.name || '-'}</td>
-                            <td>${h.quantity.toLocaleString()}</td>
-                            <td>${currencySymbol}${h.avgPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td>${currencySymbol}${totalPurchase.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
-                            <td>${currencySymbol}${currentPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
-                            <td>${ma150Display}</td>
-                            <td><strong>₪${valueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
-                            <td>${profitCurrencyDisplay}</td>
-                            <td class="${isProfit ? 'profit' : 'loss'}">
+                            <td class="col-static stock-symbol">${h.symbol}</td>
+                            <td class="col-static">${h.name || '-'}</td>
+                            <td class="col-static">${h.quantity.toLocaleString()}</td>
+                            <td class="col-static">${currencySymbol}${h.avgPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td class="col-static">₪${costILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                            <td class="col-dynamic">${currencySymbol}${currentPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                            <td class="col-dynamic">${ma150Display}</td>
+                            <td class="col-dynamic"><strong>₪${valueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
+                            <td class="col-dynamic">${profitCurrencyDisplay}</td>
+                            <td class="col-dynamic ${isProfit ? 'profit' : 'loss'}">
                                 ${isProfit ? '+' : ''}₪${profitILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                             </td>
-                            <td>${portfolioPercent.toFixed(1)}%</td>
-                            <td>
+                            <td class="col-dynamic">${portfolioPercent.toFixed(1)}%</td>
+                            <td class="col-dynamic">
                                 <div class="action-buttons">
-                                    <button class="btn btn-secondary btn-sm" onclick="openAlertModal('${h.symbol}', ${currentPrice})" title="הוסף התראה">🔔</button>
-                                    <button class="btn btn-secondary btn-sm" onclick="openUpdatePriceModal('${h.symbol}', ${currentPrice})" title="${I18n.t('stocks.updatePrice')}">💰</button>
-                                    <button class="btn btn-secondary btn-sm" onclick="openSellModal('${h.symbol}', ${h.quantity}, ${currentPrice})" title="${I18n.t('stocks.sell')}">📤</button>
-                                    <button class="btn btn-danger btn-sm" onclick="deleteStock('${h.symbol}')" title="${I18n.t('common.delete')}">🗑️</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="openAlertModal('${h.symbol}', ${currentPrice})" title="הוסף התראה למניה">🔔</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="openUpdatePriceModal('${h.symbol}', ${currentPrice})" title="עדכן מחיר ידנית">💰</button>
+                                    <button class="btn btn-secondary btn-sm" onclick="openSellModal('${h.symbol}', ${h.quantity}, ${currentPrice})" title="מכור מניות">📤</button>
+                                    <button class="btn btn-danger btn-sm" onclick="deleteStock('${h.symbol}')" title="מחק מהתיק">🗑️</button>
                                 </div>
                             </td>
                         </tr>
@@ -779,15 +807,17 @@
                 // Add totals row
                 const isTotalProfit = totalProfitILS >= 0;
                 rows.push(`
-                    <tr style="font-weight: bold; background: var(--color-bg-hover);">
-                        <td colspan="7" style="text-align: left;">סה"כ</td>
-                        <td><strong>₪${totalValueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
-                        <td>${profitCurrencyTotal}</td>
-                        <td class="${isTotalProfit ? 'profit' : 'loss'}">
+                    <tr style="font-weight: bold; border-top: 2px solid var(--color-border);">
+                        <td class="col-static" colspan="4" style="text-align: left;">סה"כ</td>
+                        <td class="col-static">₪${totalCostILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</td>
+                        <td class="col-dynamic" colspan="2"></td>
+                        <td class="col-dynamic"><strong>₪${totalValueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
+                        <td class="col-dynamic">${profitCurrencyTotal}</td>
+                        <td class="col-dynamic ${isTotalProfit ? 'profit' : 'loss'}">
                             ${isTotalProfit ? '+' : ''}₪${totalProfitILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                         </td>
-                        <td>100%</td>
-                        <td></td>
+                        <td class="col-dynamic">100%</td>
+                        <td class="col-dynamic"></td>
                     </tr>
                 `);
 
