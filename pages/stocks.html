@@ -593,8 +593,19 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        // Currency rates cache
+        let currencyRates = { USD: 3.65, EUR: 3.95, GBP: 4.60, ILS: 1 };
+
+        document.addEventListener('DOMContentLoaded', async () => {
             App.currentPage = 'stocks';
+
+            // Fetch currency rates first
+            try {
+                currencyRates = await CurrencyRates.getRates();
+            } catch (e) {
+                console.error('Failed to get currency rates:', e);
+            }
+
             loadStocks();
             loadWatchlist();
             checkTriggeredAlerts();
@@ -616,8 +627,10 @@
             const transactionsTable = document.getElementById('transactionsTable');
 
             // Calculate totals
-            let totalValue = 0;
-            let totalCost = 0;
+            let totalValueILS = 0;
+            let totalCostILS = 0;
+            let totalProfitILS = 0;
+            let totalProfitCurrency = { USD: 0, GBP: 0, EUR: 0, ILS: 0 };
 
             if (data.holdings.length === 0) {
                 holdingsTable.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--color-text-secondary);">${I18n.t('stocks.noStocks')}</td></tr>`;
@@ -625,24 +638,44 @@
                 // Get sort criteria
                 const sortBy = document.getElementById('sortBy')?.value || 'valueILS';
 
-                // First pass: calculate total ILS value for portfolio percentages
-                let portfolioTotalILS = 0;
-                data.holdings.forEach(h => {
-                    portfolioTotalILS += h.valueILS || 0;
-                });
-
-                // Prepare holdings with calculated values for sorting
+                // Prepare holdings with calculated values
                 const holdingsWithCalc = data.holdings.map(h => {
                     const cached = priceCache[h.symbol] || {};
+                    const currency = h.currency || 'USD';
+                    const rate = currencyRates[currency] || 1;
+
                     // Use cached price if available, otherwise use imported currentPrice
                     const currentPrice = cached.currentPrice || h.currentPrice || h.avgPrice;
-                    // Use imported ILS values from broker file - these are the correct values!
-                    const valueILS = h.valueILS || 0;
-                    const profitILS = h.profitILS || 0;
+
+                    // Calculate or use imported ILS values
+                    let valueILS, profitILS, profitInCurrency;
+
+                    if (h.valueILS && h.valueILS > 0) {
+                        // Use imported values from broker
+                        valueILS = h.valueILS;
+                        profitILS = h.profitILS || 0;
+                        // Calculate profit in currency from ILS
+                        profitInCurrency = profitILS / rate;
+                    } else {
+                        // Calculate for manual stocks
+                        const valueInCurrency = currentPrice * h.quantity;
+                        valueILS = valueInCurrency * rate;
+                        profitInCurrency = (currentPrice - h.avgPrice) * h.quantity;
+                        profitILS = profitInCurrency * rate;
+                    }
+
                     const costILS = valueILS - profitILS;
                     const profitPercent = costILS > 0 ? (profitILS / costILS) * 100 : 0;
-                    const portfolioPercent = portfolioTotalILS > 0 ? (valueILS / portfolioTotalILS) * 100 : 0;
-                    return { ...h, currentPrice, valueILS, profitILS, costILS, profitPercent, portfolioPercent, cached };
+
+                    return { ...h, currentPrice, valueILS, profitILS, profitInCurrency, costILS, profitPercent, cached, currency, rate };
+                });
+
+                // Calculate portfolio total for percentages
+                const portfolioTotalILS = holdingsWithCalc.reduce((sum, h) => sum + h.valueILS, 0);
+
+                // Add portfolio percentage
+                holdingsWithCalc.forEach(h => {
+                    h.portfolioPercent = portfolioTotalILS > 0 ? (h.valueILS / portfolioTotalILS) * 100 : 0;
                 });
 
                 // Sort holdings
@@ -666,15 +699,21 @@
                     return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
                 });
 
-                holdingsTable.innerHTML = holdingsWithCalc.map(h => {
-                    const { currentPrice, valueILS, profitILS, costILS, profitPercent, portfolioPercent, cached } = h;
-                    const currency = h.currency || 'USD';
+                // Build rows and calculate totals
+                const rows = holdingsWithCalc.map(h => {
+                    const { currentPrice, valueILS, profitILS, profitInCurrency, costILS, profitPercent, portfolioPercent, cached, currency } = h;
                     const currencySymbol = { USD: '$', GBP: '£', ILS: '₪', EUR: '€' }[currency] || '$';
 
                     const isProfit = profitILS >= 0;
+                    const isProfitCurrency = profitInCurrency >= 0;
 
-                    totalValue += valueILS;
-                    totalCost += costILS;
+                    // Accumulate totals
+                    totalValueILS += valueILS;
+                    totalCostILS += costILS;
+                    totalProfitILS += profitILS;
+                    if (currency !== 'ILS') {
+                        totalProfitCurrency[currency] = (totalProfitCurrency[currency] || 0) + profitInCurrency;
+                    }
 
                     // Total purchase cost in trading currency
                     const totalPurchase = h.avgPrice * h.quantity;
@@ -688,10 +727,11 @@
                         ma150Display = `<span class="${ma150Position === 'above' ? 'profit' : 'loss'}">${positionIcon} ${currencySymbol}${ma150.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`;
                     }
 
-                    // Profit in trading currency (calculate from prices)
-                    const profitPerUnit = currentPrice - h.avgPrice;
-                    const profitInCurrency = profitPerUnit * h.quantity;
-                    const isProfitCurrency = profitInCurrency >= 0;
+                    // Profit in currency - only show for non-ILS stocks
+                    let profitCurrencyDisplay = '-';
+                    if (currency !== 'ILS') {
+                        profitCurrencyDisplay = `<span class="${isProfitCurrency ? 'profit' : 'loss'}">${isProfitCurrency ? '+' : ''}${currencySymbol}${profitInCurrency.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>`;
+                    }
 
                     return `
                         <tr>
@@ -703,9 +743,7 @@
                             <td>${currencySymbol}${currentPrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                             <td>${ma150Display}</td>
                             <td><strong>₪${valueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
-                            <td class="${isProfitCurrency ? 'profit' : 'loss'}">
-                                ${isProfitCurrency ? '+' : ''}${currencySymbol}${profitInCurrency.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
-                            </td>
+                            <td>${profitCurrencyDisplay}</td>
                             <td class="${isProfit ? 'profit' : 'loss'}">
                                 ${isProfit ? '+' : ''}₪${profitILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
                             </td>
@@ -720,20 +758,53 @@
                             </td>
                         </tr>
                     `;
-                }).join('');
+                });
+
+                // Build profit currency totals string
+                const profitCurrencyParts = [];
+                if (totalProfitCurrency.USD !== 0) {
+                    const isP = totalProfitCurrency.USD >= 0;
+                    profitCurrencyParts.push(`<span class="${isP ? 'profit' : 'loss'}">${isP ? '+' : ''}$${totalProfitCurrency.USD.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>`);
+                }
+                if (totalProfitCurrency.GBP !== 0) {
+                    const isP = totalProfitCurrency.GBP >= 0;
+                    profitCurrencyParts.push(`<span class="${isP ? 'profit' : 'loss'}">${isP ? '+' : ''}£${totalProfitCurrency.GBP.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>`);
+                }
+                if (totalProfitCurrency.EUR !== 0) {
+                    const isP = totalProfitCurrency.EUR >= 0;
+                    profitCurrencyParts.push(`<span class="${isP ? 'profit' : 'loss'}">${isP ? '+' : ''}€${totalProfitCurrency.EUR.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</span>`);
+                }
+                const profitCurrencyTotal = profitCurrencyParts.join('<br>') || '-';
+
+                // Add totals row
+                const isTotalProfit = totalProfitILS >= 0;
+                rows.push(`
+                    <tr style="font-weight: bold; background: var(--color-bg-hover);">
+                        <td colspan="7" style="text-align: left;">סה"כ</td>
+                        <td><strong>₪${totalValueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}</strong></td>
+                        <td>${profitCurrencyTotal}</td>
+                        <td class="${isTotalProfit ? 'profit' : 'loss'}">
+                            ${isTotalProfit ? '+' : ''}₪${totalProfitILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                        </td>
+                        <td>100%</td>
+                        <td></td>
+                    </tr>
+                `);
+
+                holdingsTable.innerHTML = rows.join('');
 
                 // Update portfolio chart
                 Charts.createPortfolioChart('portfolioChart', data.holdings);
             }
 
             // Update summary metrics
-            const totalProfitLoss = totalValue - totalCost;
-            const totalReturn = totalCost > 0 ? ((totalProfitLoss / totalCost) * 100).toFixed(2) : 0;
-            const isProfit = totalProfitLoss >= 0;
+            const totalProfitLoss = totalProfitILS;
+            const totalReturn = totalCostILS > 0 ? ((totalProfitILS / totalCostILS) * 100).toFixed(2) : 0;
+            const isProfit = totalProfitILS >= 0;
 
-            document.getElementById('totalValue').textContent = `₪${totalValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-            document.getElementById('totalCost').textContent = `₪${totalCost.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
-            document.getElementById('totalProfitLoss').textContent = (isProfit ? '+' : '') + `₪${totalProfitLoss.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('totalValue').textContent = `₪${totalValueILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('totalCost').textContent = `₪${totalCostILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+            document.getElementById('totalProfitLoss').textContent = (isProfit ? '+' : '') + `₪${totalProfitILS.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
             document.getElementById('totalProfitLoss').className = isProfit ? 'value profit' : 'value loss';
             document.getElementById('totalReturn').textContent = (isProfit ? '+' : '') + totalReturn + '%';
             document.getElementById('totalReturn').className = isProfit ? 'value profit' : 'value loss';
