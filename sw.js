@@ -1,4 +1,4 @@
-const CACHE_NAME = 'finzilla-v29';
+const CACHE_NAME = 'finzilla-v30';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -19,6 +19,8 @@ const ASSETS_TO_CACHE = [
     './js/widgets.js',
     './js/currency.js',
     './js/data-updates.js',
+    './js/firebase-config.js',
+    './js/auth.js',
     './pages/bank.html',
     './pages/credit.html',
     './pages/stocks.html',
