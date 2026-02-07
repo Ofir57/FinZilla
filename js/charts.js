@@ -221,10 +221,19 @@ const Charts = {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
 
+        // Use valueILS if available (from broker import), otherwise calculate
+        const getValue = (h) => {
+            if (h.valueILS && h.valueILS > 0) {
+                return h.valueILS;
+            }
+            // Fallback calculation for manual stocks
+            return h.quantity * (h.currentPrice || h.avgPrice);
+        };
+
         const chartData = {
             labels: holdings.map(h => h.symbol),
             datasets: [{
-                data: holdings.map(h => h.quantity * (h.currentPrice || h.avgPrice)),
+                data: holdings.map(h => getValue(h)),
                 backgroundColor: holdings.map((_, i) =>
                     `hsl(${(i * 360 / holdings.length)}, 70%, 60%)`
                 ),
@@ -251,7 +260,7 @@ const Charts = {
                                     const value = context.raw;
                                     const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                     const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                    return `${context.label}: ${I18n.formatCurrency(value)} (${percentage}%)`;
+                                    return `${context.label}: ₪${value.toLocaleString()} (${percentage}%)`;
                                 }
                             }
                         }
